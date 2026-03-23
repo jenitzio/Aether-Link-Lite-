@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NEON OVERDRIVE: SHOP EDITION</title>
+    <style>
+        :root { --neon-blue: #00f2ff; --neon-pink: #ff00ff; --neon-yellow: #ffff00; --neon-green: #39ff14; }
+        body { background: #020202; margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: white; user-select: none; }
+        #game-wrapper { position: relative; width: 100vw; height: 100vh; background: radial-gradient(circle, #111 0%, #000 100%); cursor: crosshair; }
+        canvas { display: block; filter: contrast(1.1) brightness(1.2); }
+
+        /* UI */
+        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.95); z-index: 100; text-align: center; }
+        .hidden { display: none !important; }
+        h1 { color: var(--neon-blue); text-shadow: 0 0 20px var(--neon-blue); font-size: 3.5rem; margin: 0; letter-spacing: 5px; }
+        
+        .stats-bar { position: absolute; top: 20px; left: 20px; font-weight: bold; font-size: 1.2rem; pointer-events: none; z-index: 10; }
+        .gold-display { color: var(--neon-yellow); text-shadow: 0 0 10px var(--neon-yellow); }
+        
+        /* SHOP STYLES */
+        .shop-container { width: 80%; max-width: 600px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .shop-item { border: 2px solid var(--neon-blue); padding: 15px; background: rgba(0, 242, 255, 0.1); border-radius: 10px; cursor: pointer; transition: 0.2s; }
+        .shop-item:hover { background: var(--neon-blue); color: black; box-shadow: 0 0 20px var(--neon-blue); }
+        .shop-item h3 { margin: 0; font-size: 1.1rem; }
+        .shop-item p { margin: 5px 0; font-size: 0.9rem; font-weight: bold; color: var(--neon-yellow); }
+
+        .btn { background: none; border: 2px solid var(--neon-blue); color: var(--neon-blue); padding: 15px 40px; font-size: 1.2rem; cursor: pointer; transition: 0.3s; margin-top: 20px; }
+        .btn:hover { background: var(--neon-blue); color: black; }
+        #pause-overlay h2 { color: var(--neon-pink); font-size: 2.5rem; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <div class="stats-bar">
+        SCORE: <span id="score">0</span> | BEST: <span id="best">0</span><br>
+        GOLD: <span id="gold-val" class="gold-display">0</span><br>
+        <small style="color: var(--neon-pink)">FIRE RATE: <span id="fr-lvl">1</span> | MULTISHOT: <span id="ms-lvl">1</span></small>
+    </div>
+
+    <!-- MAIN MENU -->
+    <div id="menu" class="overlay">
+        <h1>NEON OVERDRIVE</h1>
+        <p>CLICK TO FIRE | 'P' TO OPEN SHOP & PAUSE</p>
+        <button class="btn" onclick="startGame()">INITIALIZE SYSTEM</button>
+    </div>
+
+    <!-- SHOP / PAUSE MENU -->
+    <div id="pause-overlay" class="overlay hidden">
+        <h2>CYBER SHOP</h2>
+        <div class="gold-display" style="font-size: 1.5rem;">YOUR GOLD: <span id="shop-gold">0</span></div>
+        <div class="shop-container">
+            <div class="shop-item" onclick="buyUpgrade('fr')">
+                <h3>OVERCLOCK CORE</h3>
+                <p>COST: 150 GOLD</p>
+                <span>+ Fire Rate</span>
+            </div>
+            <div class="shop-item" onclick="buyUpgrade('ms')">
+                <h3>SPLIT BARREL</h3>
+                <p>COST: 500 GOLD</p>
+                <span>+1 Extra Bullet</span>
+            </div>
+            <div class="shop-item" onclick="buyUpgrade('shield')">
+                <h3>ION SHIELD</h3>
+                <p>COST: 300 GOLD</p>
+                <span>1-Hit Protection</span>
+            </div>
+            <div class="shop-item" onclick="buyUpgrade('speed')">
+                <h3>ENGINE TUNE</h3>
+                <p>COST: 200 GOLD</p>
+                <span>+ Bullet Velocity</span>
+            </div>
+        </div>
+        <button class="btn" onclick="togglePause()" style="border-color: var(--neon-pink); color: var(--neon-pink);">RESUME MISSION</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const frEl = document.getElementById('fr-lvl');
+    const msEl = document.getElementById('ms-lvl');
+    const goldEl = document.getElementById('gold-val');
+    const shopGoldEl = document.getElementById('shop-gold');
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let gameActive = false, paused = false;
+    let score = 0, best = localStorage.getItem('neonBestPro') || 0;
+    let gold = 0;
+    let mouse = { x: canvas.width/2, y: canvas.height/2 };
+    
+    // Player Stats
+    let fireRate = 400, multiShot = 1, bulletSpeed = 12, shieldActive = false;
+    let lastShot = 0, isFiring = false;
+
+    let player = { x: 0, y: 0, w: 50, h: 50, color: '#00f2ff' };
+    let bullets = [], enemies = [], particles = [], crates = [];
+
+    bestEl.innerText = best;
+
+    // Listeners
+    window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+    window.addEventListener('mousedown', () => { if(gameActive && !paused) isFiring = true; });
+    window.addEventListener('mouseup', () => { isFiring = false; });
+    window.addEventListener('keydown', e => { if(e.code === 'KeyP') togglePause(); });
+
+    function togglePause() {
+        if(!gameActive) return;
+        paused = !paused;
+        shopGoldEl.innerText = gold;
+        document.getElementById('pause-overlay').classList.toggle('hidden', !paused);
+        if(!paused) animate();
+    }
+
+    function buyUpgrade(type) {
+        if(type === 'fr' && gold >= 150) { gold -= 150; fireRate = Math.max(50, fireRate - 50); }
+        else if(type === 'ms' && gold >= 500) { gold -= 500; multiShot++; }
+        else if(type === 'shield' && gold >= 300) { gold -= 300; shieldActive = true; }
+        else if(type === 'speed' && gold >= 200) { gold -= 200; bulletSpeed += 4; }
+        else { alert("NOT ENOUGH GOLD!"); return; }
+        
+        updateUI();
+        shopGoldEl.innerText = gold;
+    }
+
+    function updateUI() {
+        goldEl.innerText = gold;
+        scoreEl.innerText = score;
+        frEl.innerText = Math.round(400/fireRate);
+        msEl.innerText = multiShot;
+    }
+
+    function startGame() {
+        document.getElementById('menu').classList.add('hidden');
+        gameActive = true; score = 0; gold = 0; fireRate = 400; multiShot = 1; bulletSpeed = 12;
+        enemies = []; bullets = []; particles = []; crates = [];
+        updateUI();
+        animate();
+    }
+
+    function spawnExplosion(x, y, color, amount = 20) {
+        for(let i=0; i<amount; i++) {
+            particles.push({
+                x, y, vx: (Math.random()-0.5) * 12, vy: (Math.random()-0.5) * 12,
+                size: Math.random() * 4 + 2, life: 1, color
+            });
+        }
+    }
+
+    function fire() {
+        const now = Date.now();
+        if(now - lastShot < fireRate) return;
+        for(let i=0; i<multiShot; i++) {
+            let offset = (i - (multiShot-1)/2) * 15;
+            bullets.push({ x: player.x + player.w/2 - 2 + offset, y: player.y, w: 4, h: 20 });
+        }
+        lastShot = now;
+    }
+
+    function animate() {
+        if(!gameActive || paused) return;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(0,0, canvas.width, canvas.height);
+
+        player.x += (mouse.x - player.x - player.w/2) * 0.15;
+        player.y += (mouse.y - player.y - player.h/2) * 0.15;
+
+        if(isFiring) fire();
+
+        // Particles
+        particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy; p.life -= 0.02;
+            if(p.life <= 0) particles.splice(i, 1);
+            ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+        });
+        ctx.globalAlpha = 1;
+
+        // Bullets
+        bullets.forEach((b, i) => {
+            b.y -= bulletSpeed;
+            ctx.fillStyle = '#00f2ff';
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            if(b.y < 0) bullets.splice(i, 1);
+        });
+
+        // Enemies
+        if(Math.random() < 0.05) {
+            enemies.push({ x: Math.random()*canvas.width, y: -50, size: 40 + Math.random()*30, hp: 2, speed: 3 });
+        }
+
+        enemies.forEach((en, i) => {
+            en.y += en.speed;
+            ctx.strokeStyle = '#ff00ff';
+            ctx.lineWidth = 3; ctx.strokeRect(en.x, en.y, en.size, en.size);
+            
+            bullets.forEach((b, bi) => {
+                if(b.x < en.x + en.size && b.x + b.w > en.x && b.y < en.y + en.size && b.y + b.h > en.y) {
+                    en.hp--; bullets.splice(bi, 1);
+                    if(en.hp <= 0) {
+                        spawnExplosion(en.x + en.size/2, en.y + en.size/2, '#ff00ff', 20);
+                        gold += Math.floor(Math.random() * 15) + 10; // Gold reward
+                        if(Math.random() < 0.2) crates.push({x: en.x, y: en.y});
+                        enemies.splice(i, 1); score += 10;
+                        updateUI();
+                    }
+                }
+            });
+
+            if(player.x < en.x + en.size && player.x + player.w > en.x && player.y < en.y + en.size && player.y + player.h > en.y) {
+                if(shieldActive) { shieldActive = false; enemies.splice(i, 1); spawnExplosion(player.x, player.y, '#ffff00', 30); }
+                else gameOver();
+            }
+            if(en.y > canvas.height) enemies.splice(i, 1);
+        });
+
+        // Loot Boxes
+        crates.forEach((c, i) => {
+            c.y += 3;
+            ctx.fillStyle = '#ffff00'; ctx.fillRect(c.x, c.y, 25, 25);
+            if(player.x < c.x + 25 && player.x + player.w > c.x && player.y < c.y + 25 && player.y + player.h > c.y) {
+                crates.splice(i, 1); gold += 100; updateUI(); // Crate gives gold bonus
+            }
+        });
+
+        // Player & Shield
+        if(shieldActive) {
+            ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 4;
+            ctx.strokeRect(player.x - 8, player.y - 8, player.w + 16, player.h + 16);
+        }
+        ctx.fillStyle = player.color; ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        requestAnimationFrame(animate);
+    }
+
+    function gameOver() {
+        gameActive = false;
+        if(score > best) localStorage.setItem('neonBestPro', score);
+        alert("GAME OVER\nGold Collected: " + gold + "\nFinal Score: " + score);
+        location.reload();
+    }
+</script>
+</body>
+</html>
+
+

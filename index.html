@@ -1,253 +1,738 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>NEON OVERDRIVE: SHOP EDITION</title>
-    <style>
-        :root { --neon-blue: #00f2ff; --neon-pink: #ff00ff; --neon-yellow: #ffff00; --neon-green: #39ff14; }
-        body { background: #020202; margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: white; user-select: none; }
-        #game-wrapper { position: relative; width: 100vw; height: 100vh; background: radial-gradient(circle, #111 0%, #000 100%); cursor: crosshair; }
-        canvas { display: block; filter: contrast(1.1) brightness(1.2); }
-
-        /* UI */
-        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.95); z-index: 100; text-align: center; }
-        .hidden { display: none !important; }
-        h1 { color: var(--neon-blue); text-shadow: 0 0 20px var(--neon-blue); font-size: 3.5rem; margin: 0; letter-spacing: 5px; }
-        
-        .stats-bar { position: absolute; top: 20px; left: 20px; font-weight: bold; font-size: 1.2rem; pointer-events: none; z-index: 10; }
-        .gold-display { color: var(--neon-yellow); text-shadow: 0 0 10px var(--neon-yellow); }
-        
-        /* SHOP STYLES */
-        .shop-container { width: 80%; max-width: 600px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
-        .shop-item { border: 2px solid var(--neon-blue); padding: 15px; background: rgba(0, 242, 255, 0.1); border-radius: 10px; cursor: pointer; transition: 0.2s; }
-        .shop-item:hover { background: var(--neon-blue); color: black; box-shadow: 0 0 20px var(--neon-blue); }
-        .shop-item h3 { margin: 0; font-size: 1.1rem; }
-        .shop-item p { margin: 5px 0; font-size: 0.9rem; font-weight: bold; color: var(--neon-yellow); }
-
-        .btn { background: none; border: 2px solid var(--neon-blue); color: var(--neon-blue); padding: 15px 40px; font-size: 1.2rem; cursor: pointer; transition: 0.3s; margin-top: 20px; }
-        .btn:hover { background: var(--neon-blue); color: black; }
-        #pause-overlay h2 { color: var(--neon-pink); font-size: 2.5rem; margin-bottom: 5px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aether-Link Lite v2</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js"></script>
+  <style>
+    html, body {
+      margin: 0; padding: 0; overflow: hidden;
+      background: #000; color: #bdfcff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+    }
+    #webcam {
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      object-fit: cover; transform: scaleX(-1);
+      opacity: 0.05; pointer-events: none; z-index: 0;
+    }
+    canvas {
+      position: fixed !important; inset: 0; z-index: 1;
+    }
+    #hud {
+      position: fixed; top: 10px; left: 10px; z-index: 5;
+      font-size: 11px; line-height: 1.6;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(0,255,255,0.15);
+      padding: 8px 12px; border-radius: 8px;
+      min-width: 155px; backdrop-filter: blur(4px);
+    }
+    #hud .label { color: #5aa; }
+    #hud .val   { color: #7df9ff; font-weight: bold; }
+    #gestureBar {
+      position: fixed; bottom: 12px; left: 50%;
+      transform: translateX(-50%); z-index: 5;
+      font-size: 11px; color: #5de;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(0,255,255,0.12);
+      padding: 6px 16px; border-radius: 20px;
+      white-space: nowrap; backdrop-filter: blur(4px);
+    }
+    #startOverlay {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; align-items: center;
+      justify-content: center; flex-direction: column;
+      background: #000; gap: 16px;
+    }
+    #startBtn {
+      background: #06141a; color: #7df9ff;
+      border: 1px solid #1de9ff;
+      padding: 14px 28px; border-radius: 10px;
+      font-size: 15px; cursor: pointer;
+      transition: background 0.2s;
+    }
+    #startBtn:hover { background: #0a2a35; }
+    #status { color: #8aa; font-size: 13px; }
+  </style>
 </head>
 <body>
+  <video id="webcam" autoplay playsinline muted></video>
 
-<div id="game-wrapper">
-    <div class="stats-bar">
-        SCORE: <span id="score">0</span> | BEST: <span id="best">0</span><br>
-        GOLD: <span id="gold-val" class="gold-display">0</span><br>
-        <small style="color: var(--neon-pink)">FIRE RATE: <span id="fr-lvl">1</span> | MULTISHOT: <span id="ms-lvl">1</span></small>
-    </div>
+  <div id="hud">
+    <div><span class="label">FPS:</span> <span class="val" id="fps">0</span></div>
+    <div><span class="label">Hands:</span> <span class="val" id="handCount">0</span></div>
+    <div><span class="label">Gesture:</span> <span class="val" id="gesture">IDLE</span></div>
+    <div><span class="label">Particles:</span> <span class="val" id="pCount">0</span></div>
+  </div>
 
-    <!-- MAIN MENU -->
-    <div id="menu" class="overlay">
-        <h1>NEON OVERDRIVE</h1>
-        <p>CLICK TO FIRE | 'P' TO OPEN SHOP & PAUSE</p>
-        <button class="btn" onclick="startGame()">INITIALIZE SYSTEM</button>
-    </div>
+  <div id="gestureBar">
+    ✊ Fist · ☝ Point · ✌ Peace · 🖐 Palm · 🤏 Pinch · 👍 Thumb · 🔫 Gun · 🌀 Three · 🤙 Shaka
+  </div>
 
-    <!-- SHOP / PAUSE MENU -->
-    <div id="pause-overlay" class="overlay hidden">
-        <h2>CYBER SHOP</h2>
-        <div class="gold-display" style="font-size: 1.5rem;">YOUR GOLD: <span id="shop-gold">0</span></div>
-        <div class="shop-container">
-            <div class="shop-item" onclick="buyUpgrade('fr')">
-                <h3>OVERCLOCK CORE</h3>
-                <p>COST: 150 GOLD</p>
-                <span>+ Fire Rate</span>
-            </div>
-            <div class="shop-item" onclick="buyUpgrade('ms')">
-                <h3>SPLIT BARREL</h3>
-                <p>COST: 500 GOLD</p>
-                <span>+1 Extra Bullet</span>
-            </div>
-            <div class="shop-item" onclick="buyUpgrade('shield')">
-                <h3>ION SHIELD</h3>
-                <p>COST: 300 GOLD</p>
-                <span>1-Hit Protection</span>
-            </div>
-            <div class="shop-item" onclick="buyUpgrade('speed')">
-                <h3>ENGINE TUNE</h3>
-                <p>COST: 200 GOLD</p>
-                <span>+ Bullet Velocity</span>
-            </div>
-        </div>
-        <button class="btn" onclick="togglePause()" style="border-color: var(--neon-pink); color: var(--neon-pink);">RESUME MISSION</button>
-    </div>
+  <div id="startOverlay">
+    <button id="startBtn">▶ Start Aether-Link</button>
+    <div id="status">Waiting for user action…</div>
+  </div>
 
-    <canvas id="gameCanvas"></canvas>
-</div>
+  <script>
+    // =============================================================
+    //  PART 1 — CONFIG & APP STATE
+    // =============================================================
+    const CONFIG = {
+      // --- Performance (low-res = faster) ---
+      cameraWidth:    320,        // halved from 640
+      cameraHeight:   240,        // halved from 480
+      cameraFPS:      60,
+      skipFrames:     1,          // process every N-th frame (1=all, 2=half)
+      canvasScale:    1,          // 1 = native, 0.75 = 75% res
 
-<script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const scoreEl = document.getElementById('score');
-    const bestEl = document.getElementById('best');
-    const frEl = document.getElementById('fr-lvl');
-    const msEl = document.getElementById('ms-lvl');
-    const goldEl = document.getElementById('gold-val');
-    const shopGoldEl = document.getElementById('shop-gold');
+      // --- Particles ---
+      maxParticles:   80,
+      maxTrailPoints: 30,
+      maxProjectiles: 12,
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+      // --- Detection ---
+      pinchThreshold:    0.055,
+      fistThreshold:     0.08,
+      hudUpdateMs:       150,
+      maxHands:          2,
+      modelComplexity:   0,       // 0 = lite (fastest)
+      minDetection:      0.55,
+      minTracking:       0.5,
 
-    let gameActive = false, paused = false;
-    let score = 0, best = localStorage.getItem('neonBestPro') || 0;
-    let gold = 0;
-    let mouse = { x: canvas.width/2, y: canvas.height/2 };
-    
-    // Player Stats
-    let fireRate = 400, multiShot = 1, bulletSpeed = 12, shieldActive = false;
-    let lastShot = 0, isFiring = false;
+      // --- Visual ---
+      trailFade:         0.92,
+      bgAlpha:           40,
+    };
 
-    let player = { x: 0, y: 0, w: 50, h: 50, color: '#00f2ff' };
-    let bullets = [], enemies = [], particles = [], crates = [];
+    // Global app state
+    const App = {
+      started:        false,
+      video:          null,
+      hands:          null,
+      latestResults:  null,
+      handData:       [],
+      globalGesture:  "IDLE",
+      prevGesture:    "IDLE",
+      lastHudUpdate:  0,
+      frameIndex:     0,
 
-    bestEl.innerText = best;
+      // Trail (for POINT gesture)
+      trails:         [],    // {points:[], color, alpha}
 
-    // Listeners
-    window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-    window.addEventListener('mousedown', () => { if(gameActive && !paused) isFiring = true; });
-    window.addEventListener('mouseup', () => { isFiring = false; });
-    window.addEventListener('keydown', e => { if(e.code === 'KeyP') togglePause(); });
+      // Projectiles (for FINGER_GUN)
+      projectiles:   [],    // {x,y,vx,vy,life,color}
 
-    function togglePause() {
-        if(!gameActive) return;
-        paused = !paused;
-        shopGoldEl.innerText = gold;
-        document.getElementById('pause-overlay').classList.toggle('hidden', !paused);
-        if(!paused) animate();
+      // Shockwave (for FIST)
+      shockwaves:    [],    // {x,y,radius,maxRadius,alpha}
+
+      // Vortex angle (for THREE_FINGERS)
+      vortexAngle:   0,
+    };
+  </script>
+  <script>
+    // =============================================================
+    //  PART 2 — CLASSES & HAND HELPERS
+    // =============================================================
+
+    // --- Hand skeleton connections ---
+    const HAND_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],
+      [0,5],[5,6],[6,7],[7,8],
+      [0,9],[9,10],[10,11],[11,12],
+      [0,13],[13,14],[14,15],[15,16],
+      [0,17],[17,18],[18,19],[19,20],
+      [5,9],[9,13],[13,17]
+    ];
+
+    function mapToScreen(lm) {
+      return {
+        x: (1 - lm.x) * window.innerWidth,
+        y: lm.y  * window.innerHeight,
+        z: lm.z || 0
+      };
     }
 
-    function buyUpgrade(type) {
-        if(type === 'fr' && gold >= 150) { gold -= 150; fireRate = Math.max(50, fireRate - 50); }
-        else if(type === 'ms' && gold >= 500) { gold -= 500; multiShot++; }
-        else if(type === 'shield' && gold >= 300) { gold -= 300; shieldActive = true; }
-        else if(type === 'speed' && gold >= 200) { gold -= 200; bulletSpeed += 4; }
-        else { alert("NOT ENOUGH GOLD!"); return; }
-        
-        updateUI();
-        shopGoldEl.innerText = gold;
+    function dist2(a, b) {
+      const dx = a.x - b.x, dy = a.y - b.y;
+      return Math.sqrt(dx*dx + dy*dy);
     }
 
-    function updateUI() {
-        goldEl.innerText = gold;
-        scoreEl.innerText = score;
-        frEl.innerText = Math.round(400/fireRate);
-        msEl.innerText = multiShot;
+    function dist3(a, b) {
+      const dx = a.x - b.x, dy = a.y - b.y, dz = (a.z||0) - (b.z||0);
+      return Math.sqrt(dx*dx + dy*dy + dz*dz);
     }
 
-    function startGame() {
-        document.getElementById('menu').classList.add('hidden');
-        gameActive = true; score = 0; gold = 0; fireRate = 400; multiShot = 1; bulletSpeed = 12;
-        enemies = []; bullets = []; particles = []; crates = [];
-        updateUI();
-        animate();
+    function distSq2(a, b) {
+      const dx = a.x - b.x, dy = a.y - b.y;
+      return dx*dx + dy*dy;
     }
 
-    function spawnExplosion(x, y, color, amount = 20) {
-        for(let i=0; i<amount; i++) {
-            particles.push({
-                x, y, vx: (Math.random()-0.5) * 12, vy: (Math.random()-0.5) * 12,
-                size: Math.random() * 4 + 2, life: 1, color
+    // Finger extended check (screen-space: lower y = higher)
+    function fingerExtended(sLms, tipIdx, pipIdx) {
+      return sLms[tipIdx].y < sLms[pipIdx].y;
+    }
+
+    function fingerCurled(sLms, tipIdx, pipIdx) {
+      return sLms[tipIdx].y > sLms[pipIdx].y;
+    }
+
+    // ---- Gesture recognizers (all use screenLandmarks for y-axis) ----
+
+    function isOpenPalm(sLms) {
+      return fingerExtended(sLms,8,6) && fingerExtended(sLms,12,10) &&
+             fingerExtended(sLms,16,14) && fingerExtended(sLms,20,18);
+    }
+
+    function isFist(sLms) {
+      return fingerCurled(sLms,8,6) && fingerCurled(sLms,12,10) &&
+             fingerCurled(sLms,16,14) && fingerCurled(sLms,20,18) &&
+             fingerCurled(sLms,4,3);
+    }
+
+    function isThumbsUp(sLms) {
+      const thumbUp = sLms[4].y < sLms[3].y;
+      return thumbUp &&
+             fingerCurled(sLms,8,6) && fingerCurled(sLms,12,10) &&
+             fingerCurled(sLms,16,14) && fingerCurled(sLms,20,18);
+    }
+
+    function isPoint(sLms) {
+      return fingerExtended(sLms,8,6) &&
+             fingerCurled(sLms,12,10) && fingerCurled(sLms,16,14) &&
+             fingerCurled(sLms,20,18);
+    }
+
+    function isPeace(sLms) {
+      return fingerExtended(sLms,8,6) && fingerExtended(sLms,12,10) &&
+             fingerCurled(sLms,16,14) && fingerCurled(sLms,20,18);
+    }
+
+    function isThreeFingers(sLms) {
+      return fingerExtended(sLms,8,6) && fingerExtended(sLms,12,10) &&
+             fingerExtended(sLms,16,14) && fingerCurled(sLms,20,18);
+    }
+
+    function isFingerGun(sLms) {
+      const thumbUp = sLms[4].y < sLms[3].y;
+      return thumbUp && fingerExtended(sLms,8,6) &&
+             fingerCurled(sLms,12,10) && fingerCurled(sLms,16,14) &&
+             fingerCurled(sLms,20,18);
+    }
+
+    function isShaka(sLms) {
+      const thumbOut = sLms[4].y < sLms[3].y;
+      return thumbOut && fingerCurled(sLms,8,6) &&
+             fingerCurled(sLms,12,10) && fingerCurled(sLms,16,14) &&
+             fingerExtended(sLms,20,18);
+    }
+
+    // ---- Bounding box ----
+    function computeBBox(sLms) {
+      let x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity;
+      for (const p of sLms) {
+        if (p.x<x0) x0=p.x; if (p.y<y0) y0=p.y;
+        if (p.x>x1) x1=p.x; if (p.y>y1) y1=p.y;
+      }
+      return { x:x0, y:y0, w:x1-x0, h:y1-y0 };
+    }
+
+    // =============================================================
+    //  PARTICLE (lightweight)
+    // =============================================================
+    class Particle {
+      constructor() { this.reset(); }
+
+      reset() {
+        this.x  = Math.random() * window.innerWidth;
+        this.y  = Math.random() * window.innerHeight;
+        this.vx = (Math.random()-0.5) * 1.0;
+        this.vy = (Math.random()-0.5) * 1.0;
+        this.sz = 1 + Math.random() * 2.5;
+        this.layer = Math.random() < 0.5 ? 0 : 1;
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        const W = window.innerWidth, H = window.innerHeight;
+        if (this.x<0) this.x+=W; if (this.x>W) this.x-=W;
+        if (this.y<0) this.y+=H; if (this.y>H) this.y-=H;
+        this.vx *= 0.993;
+        this.vy *= 0.993;
+      }
+
+      attract(tx, ty, str = 0.03) {
+        const dx = tx-this.x, dy = ty-this.y;
+        const d = Math.max(20, Math.sqrt(dx*dx+dy*dy));
+        this.vx += (dx/d)*str;
+        this.vy += (dy/d)*str;
+      }
+
+      repel(tx, ty, str = 1.0, rad = 200) {
+        const dx = this.x-tx, dy = this.y-ty;
+        const dSq = dx*dx+dy*dy;
+        if (dSq > 0 && dSq < rad*rad) {
+          const d = Math.sqrt(dSq);
+          const f = (1-d/rad)*str;
+          this.vx += (dx/d)*f;
+          this.vy += (dy/d)*f;
+        }
+      }
+
+      orbit(cx, cy, str = 0.02, rad = 180) {
+        const dx = this.x-cx, dy = this.y-cy;
+        const dSq = dx*dx+dy*dy;
+        if (dSq < rad*rad && dSq > 100) {
+          const d = Math.sqrt(dSq);
+          // tangential force (perpendicular)
+          this.vx += (-dy/d)*str;
+          this.vy += ( dx/d)*str;
+          // gentle inward pull
+          this.vx -= (dx/d)*str*0.3;
+          this.vy -= (dy/d)*str*0.3;
+        }
+      }
+    }
+
+    // Pre-allocate particles
+    const particles = [];
+    for (let i = 0; i < CONFIG.maxParticles; i++) particles.push(new Particle());
+  </script>
+  <script>
+    // =============================================================
+    //  PART 3 — MEDIAPIPE + GESTURE STATE MACHINE
+    // =============================================================
+
+    async function setupHands() {
+      App.hands = new Hands({
+        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`
+      });
+      App.hands.setOptions({
+        maxNumHands:           CONFIG.maxHands,
+        modelComplexity:       CONFIG.modelComplexity,
+        minDetectionConfidence: CONFIG.minDetection,
+        minTrackingConfidence:  CONFIG.minTracking
+      });
+      App.hands.onResults(onResults);
+    }
+
+    function onResults(results) {
+      App.latestResults = results;
+      App.handData = [];
+
+      const multi = results.multiHandLandmarks || [];
+      const sides  = results.multiHandedness || [];
+
+      for (let i = 0; i < multi.length; i++) {
+        const lms  = multi[i];
+        const sLms = lms.map(mapToScreen);
+        const bbox = computeBBox(sLms);
+
+        const indexTip = sLms[8];
+        const thumbTip = sLms[4];
+        const middleTip = sLms[12];
+        const palm     = sLms[0];
+        const pinchMid = {
+          x: (indexTip.x + thumbTip.x) * 0.5,
+          y: (indexTip.y + thumbTip.y) * 0.5
+        };
+
+        const pinchDist = dist3(lms[4], lms[8]);
+        const pinching  = pinchDist < CONFIG.pinchThreshold;
+
+        App.handData.push({
+          label:       sides[i]?.label || "Hand",
+          landmarks:   lms,
+          sLms,
+          bbox,
+          indexTip, thumbTip, middleTip, palm, pinchMid,
+          pinchDist, pinching,
+          // Gesture booleans
+          fist:         isFist(sLms),
+          thumbsUp:     isThumbsUp(sLms),
+          openPalm:     isOpenPalm(sLms),
+          point:        isPoint(sLms),
+          peace:        isPeace(sLms),
+          threeFingers: isThreeFingers(sLms),
+          fingerGun:    isFingerGun(sLms),
+          shaka:        isShaka(sLms),
+        });
+      }
+
+      resolveGlobalGesture();
+    }
+
+    // Priority-ordered gesture resolution
+    function resolveGlobalGesture() {
+      const hd = App.handData;
+      App.prevGesture = App.globalGesture;
+
+      if (hd.length === 0) { App.globalGesture = "IDLE"; return; }
+
+      // --- Two-hand combos first ---
+      if (hd.length === 2) {
+        if (hd[0].pinching && hd[1].pinching) {
+          App.globalGesture = "DUAL_PINCH"; return;
+        }
+        if (dist2(hd[0].palm, hd[1].palm) > window.innerWidth * 0.35) {
+          App.globalGesture = "TWO_SPREAD"; return;
+        }
+      }
+
+      // --- Single-hand (first match wins) ---
+      for (const h of hd) {
+        if (h.fist)         { App.globalGesture = "FIST";         return; }
+      }
+      for (const h of hd) {
+        if (h.fingerGun)    { App.globalGesture = "FINGER_GUN";   return; }
+      }
+      for (const h of hd) {
+        if (h.thumbsUp)     { App.globalGesture = "THUMBS_UP";    return; }
+      }
+      for (const h of hd) {
+        if (h.shaka)        { App.globalGesture = "SHAKA";        return; }
+      }
+      for (const h of hd) {
+        if (h.pinching)     { App.globalGesture = "PINCH";        return; }
+      }
+      for (const h of hd) {
+        if (h.point)        { App.globalGesture = "POINT";        return; }
+      }
+      for (const h of hd) {
+        if (h.peace)        { App.globalGesture = "PEACE";        return; }
+      }
+      for (const h of hd) {
+        if (h.threeFingers) { App.globalGesture = "VORTEX";       return; }
+      }
+      for (const h of hd) {
+        if (h.openPalm)     { App.globalGesture = "OPEN_PALM";    return; }
+      }
+
+      App.globalGesture = "TRACKING";
+    }
+
+    // --- Side effects on gesture transitions ---
+    function onGestureEdge(prev, curr) {
+      // FIST just activated → spawn shockwave
+      if (curr === "FIST" && prev !== "FIST") {
+        for (const h of App.handData) {
+          if (h.fist) {
+            App.shockwaves.push({
+              x: h.palm.x, y: h.palm.y,
+              radius: 10, maxRadius: 260, alpha: 255
             });
+          }
         }
-    }
-
-    function fire() {
-        const now = Date.now();
-        if(now - lastShot < fireRate) return;
-        for(let i=0; i<multiShot; i++) {
-            let offset = (i - (multiShot-1)/2) * 15;
-            bullets.push({ x: player.x + player.w/2 - 2 + offset, y: player.y, w: 4, h: 20 });
-        }
-        lastShot = now;
-    }
-
-    function animate() {
-        if(!gameActive || paused) return;
-
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.fillRect(0,0, canvas.width, canvas.height);
-
-        player.x += (mouse.x - player.x - player.w/2) * 0.15;
-        player.y += (mouse.y - player.y - player.h/2) * 0.15;
-
-        if(isFiring) fire();
-
-        // Particles
-        particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.life -= 0.02;
-            if(p.life <= 0) particles.splice(i, 1);
-            ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
-            ctx.fillRect(p.x, p.y, p.size, p.size);
-        });
-        ctx.globalAlpha = 1;
-
-        // Bullets
-        bullets.forEach((b, i) => {
-            b.y -= bulletSpeed;
-            ctx.fillStyle = '#00f2ff';
-            ctx.fillRect(b.x, b.y, b.w, b.h);
-            if(b.y < 0) bullets.splice(i, 1);
-        });
-
-        // Enemies
-        if(Math.random() < 0.05) {
-            enemies.push({ x: Math.random()*canvas.width, y: -50, size: 40 + Math.random()*30, hp: 2, speed: 3 });
-        }
-
-        enemies.forEach((en, i) => {
-            en.y += en.speed;
-            ctx.strokeStyle = '#ff00ff';
-            ctx.lineWidth = 3; ctx.strokeRect(en.x, en.y, en.size, en.size);
-            
-            bullets.forEach((b, bi) => {
-                if(b.x < en.x + en.size && b.x + b.w > en.x && b.y < en.y + en.size && b.y + b.h > en.y) {
-                    en.hp--; bullets.splice(bi, 1);
-                    if(en.hp <= 0) {
-                        spawnExplosion(en.x + en.size/2, en.y + en.size/2, '#ff00ff', 20);
-                        gold += Math.floor(Math.random() * 15) + 10; // Gold reward
-                        if(Math.random() < 0.2) crates.push({x: en.x, y: en.y});
-                        enemies.splice(i, 1); score += 10;
-                        updateUI();
-                    }
-                }
+      }
+      // FINGER_GUN just activated → fire projectile
+      if (curr === "FINGER_GUN" && prev !== "FINGER_GUN") {
+        for (const h of App.handData) {
+          if (h.fingerGun) {
+            const dx = h.indexTip.x - h.palm.x;
+            const dy = h.indexTip.y - h.palm.y;
+            const mag = Math.sqrt(dx*dx+dy*dy) || 1;
+            App.projectiles.push({
+              x: h.indexTip.x, y: h.indexTip.y,
+              vx: (dx/mag)*14, vy: (dy/mag)*14,
+              life: 60,
+              hue: Math.random()*60 + 160
             });
-
-            if(player.x < en.x + en.size && player.x + player.w > en.x && player.y < en.y + en.size && player.y + player.h > en.y) {
-                if(shieldActive) { shieldActive = false; enemies.splice(i, 1); spawnExplosion(player.x, player.y, '#ffff00', 30); }
-                else gameOver();
+            if (App.projectiles.length > CONFIG.maxProjectiles) {
+              App.projectiles.shift();
             }
-            if(en.y > canvas.height) enemies.splice(i, 1);
-        });
-
-        // Loot Boxes
-        crates.forEach((c, i) => {
-            c.y += 3;
-            ctx.fillStyle = '#ffff00'; ctx.fillRect(c.x, c.y, 25, 25);
-            if(player.x < c.x + 25 && player.x + player.w > c.x && player.y < c.y + 25 && player.y + player.h > c.y) {
-                crates.splice(i, 1); gold += 100; updateUI(); // Crate gives gold bonus
-            }
-        });
-
-        // Player & Shield
-        if(shieldActive) {
-            ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 4;
-            ctx.strokeRect(player.x - 8, player.y - 8, player.w + 16, player.h + 16);
+          }
         }
-        ctx.fillStyle = player.color; ctx.fillRect(player.x, player.y, player.w, player.h);
-
-        requestAnimationFrame(animate);
+      }
     }
 
-    function gameOver() {
-        gameActive = false;
-        if(score > best) localStorage.setItem('neonBestPro', score);
-        alert("GAME OVER\nGold Collected: " + gold + "\nFinal Score: " + score);
-        location.reload();
+    // --- Frame-skipping tracking loop ---
+    async function trackingLoop() {
+      if (!App.started || !App.video || !App.hands) return;
+      App.frameIndex++;
+
+      if (App.video.readyState >= 2 && App.frameIndex % CONFIG.skipFrames === 0) {
+        await App.hands.send({ image: App.video });
+      }
+
+      requestAnimationFrame(trackingLoop);
     }
-</script>
+  </script>
+  <script>
+    // =============================================================
+    //  PART 4 — RENDERING & STARTUP
+    // =============================================================
+
+    const sketch = (p) => {
+      let W, H;
+
+      p.setup = () => {
+        W = Math.floor(window.innerWidth  * CONFIG.canvasScale);
+        H = Math.floor(window.innerHeight * CONFIG.canvasScale);
+        const c = p.createCanvas(W, H);
+        if (CONFIG.canvasScale < 1) {
+          c.style('width',  window.innerWidth  + 'px');
+          c.style('height', window.innerHeight + 'px');
+        }
+        p.colorMode(p.HSB, 360, 100, 100, 255);
+      };
+
+      p.windowResized = () => {
+        W = Math.floor(window.innerWidth  * CONFIG.canvasScale);
+        H = Math.floor(window.innerHeight * CONFIG.canvasScale);
+        p.resizeCanvas(W, H);
+      };
+
+      p.draw = () => {
+        // Detect gesture transitions
+        onGestureEdge(App.prevGesture, App.globalGesture);
+
+        p.background(0, 0, 0, CONFIG.bgAlpha);
+
+        const S = CONFIG.canvasScale;
+
+        // ---- Update & draw particles ----
+        for (const pt of particles) {
+          pt.vx += (Math.random()-0.5)*0.008;
+          pt.vy += (Math.random()-0.5)*0.008;
+
+          for (const h of App.handData) {
+            if (h.pinching) pt.attract(h.pinchMid.x*S, h.pinchMid.y*S, 0.04);
+            if (h.openPalm) pt.repel(h.palm.x*S, h.palm.y*S, 0.16, 130);
+            if (h.peace)    pt.repel(h.middleTip.x*S, h.middleTip.y*S, 0.08, 100);
+            if (h.threeFingers) pt.orbit(h.palm.x*S, h.palm.y*S, 0.04, 180);
+            if (h.shaka) {
+              pt.vx += (Math.random()-0.5)*0.15;
+              pt.vy += (Math.random()-0.5)*0.15;
+            }
+          }
+
+          if (App.globalGesture === "DUAL_PINCH" && App.handData.length === 2) {
+            const mx = (App.handData[0].palm.x + App.handData[1].palm.x)*0.5*S;
+            const my = (App.handData[0].palm.y + App.handData[1].palm.y)*0.5*S;
+            pt.attract(mx, my, 0.055);
+          }
+          if (App.globalGesture === "TWO_SPREAD" && App.handData.length === 2) {
+            const mx = (App.handData[0].palm.x + App.handData[1].palm.x)*0.5*S;
+            const my = (App.handData[0].palm.y + App.handData[1].palm.y)*0.5*S;
+            pt.repel(mx, my, 0.28, 280);
+          }
+          if (App.globalGesture === "THUMBS_UP") {
+            pt.vx *= 1.008; pt.vy *= 1.008;
+          }
+
+          pt.update();
+
+          // Draw particle
+          const hue = pt.layer === 0 ? 190 : 200;
+          const bri = pt.layer === 0 ? 60 : 90;
+          const alp = pt.layer === 0 ? 80 : 170;
+          p.noStroke();
+          p.fill(hue, 60, bri, alp);
+          p.circle(pt.x, pt.y, pt.sz);
+        }
+
+        // ---- Trails (POINT gesture) ----
+        for (const h of App.handData) {
+          if (h.point) {
+            let trail = App.trails.find(t => t.id === h.label);
+            if (!trail) {
+              trail = { id: h.label, pts: [] };
+              App.trails.push(trail);
+            }
+            trail.pts.push({ x: h.indexTip.x*S, y: h.indexTip.y*S });
+            if (trail.pts.length > CONFIG.maxTrailPoints) trail.pts.shift();
+          }
+        }
+        // Draw & fade trails
+        for (let i = App.trails.length - 1; i >= 0; i--) {
+          const tr = App.trails[i];
+          if (tr.pts.length < 2) { App.trails.splice(i,1); continue; }
+          p.noFill(); p.strokeWeight(2);
+          for (let j = 1; j < tr.pts.length; j++) {
+            const a = Math.floor((j / tr.pts.length) * 200);
+            p.stroke(280, 80, 100, a);
+            p.line(tr.pts[j-1].x, tr.pts[j-1].y, tr.pts[j].x, tr.pts[j].y);
+          }
+          // Glow dot at tip
+          const tip = tr.pts[tr.pts.length-1];
+          p.noStroke(); p.fill(280, 60, 100, 220);
+          p.circle(tip.x, tip.y, 8);
+          // Fade if gesture ended
+          const active = App.handData.some(h => h.point && h.label === tr.id);
+          if (!active) tr.pts.splice(0, 3);
+        }
+
+        // ---- Projectiles (FINGER_GUN) ----
+        for (let i = App.projectiles.length-1; i >= 0; i--) {
+          const pr = App.projectiles[i];
+          pr.x += pr.vx; pr.y += pr.vy;
+          pr.life--;
+          if (pr.life <= 0 || pr.x<0 || pr.x>W || pr.y<0 || pr.y>H) {
+            App.projectiles.splice(i,1); continue;
+          }
+          const a = Math.floor((pr.life/60)*220);
+          p.noStroke(); p.fill(pr.hue, 90, 100, a);
+          p.circle(pr.x*S, pr.y*S, 6);
+          p.fill(pr.hue, 40, 100, a*0.4);
+          p.circle(pr.x*S, pr.y*S, 14);
+
+          // Repel nearby particles
+          for (const pt of particles) pt.repel(pr.x*S, pr.y*S, 0.6, 60);
+        }
+
+        // ---- Shockwaves (FIST) ----
+        for (let i = App.shockwaves.length-1; i >= 0; i--) {
+          const sw = App.shockwaves[i];
+          sw.radius += 6;
+          sw.alpha  -= 5;
+          if (sw.alpha <= 0 || sw.radius > sw.maxRadius) {
+            App.shockwaves.splice(i,1); continue;
+          }
+          p.noFill();
+          p.stroke(20, 100, 100, sw.alpha);
+          p.strokeWeight(2);
+          p.circle(sw.x*S, sw.y*S, sw.radius*2);
+          p.stroke(40, 80, 90, sw.alpha*0.5);
+          p.circle(sw.x*S, sw.y*S, sw.radius*1.4);
+
+          // Push particles outward
+          for (const pt of particles) pt.repel(sw.x*S, sw.y*S, 0.5, sw.radius);
+        }
+
+        // ---- Peace split beams ----
+        for (const h of App.handData) {
+          if (h.peace) {
+            p.stroke(130, 80, 100, 120); p.strokeWeight(1.5);
+            p.line(h.indexTip.x*S, h.indexTip.y*S, h.indexTip.x*S-60, h.indexTip.y*S-120);
+            p.line(h.sLms[12].x*S, h.sLms[12].y*S, h.sLms[12].x*S+60, h.sLms[12].y*S-120);
+          }
+        }
+
+        // ---- Shaka sparkles ----
+        if (App.globalGesture === "SHAKA") {
+          for (const h of App.handData) {
+            if (h.shaka) {
+              for (let s=0; s<3; s++) {
+                const sx = h.palm.x*S + (Math.random()-0.5)*100;
+                const sy = h.palm.y*S + (Math.random()-0.5)*100;
+                p.noStroke(); p.fill(50, 90, 100, 160+Math.random()*80);
+                p.circle(sx, sy, 2+Math.random()*3);
+              }
+            }
+          }
+        }
+
+        // ---- Vortex ring (THREE_FINGERS) ----
+        if (App.globalGesture === "VORTEX") {
+          App.vortexAngle += 0.06;
+          for (const h of App.handData) {
+            if (h.threeFingers) {
+              const cx = h.palm.x*S, cy = h.palm.y*S;
+              p.noFill();
+              for (let r=0; r<3; r++) {
+                const ang = App.vortexAngle + r*(Math.PI*2/3);
+                const rx = cx + Math.cos(ang)*55;
+                const ry = cy + Math.sin(ang)*55;
+                p.stroke(190+r*30, 70, 95, 140);
+                p.strokeWeight(1.5);
+                p.circle(rx, ry, 10);
+              }
+              p.stroke(200, 40, 80, 50); p.strokeWeight(0.8);
+              p.noFill(); p.circle(cx, cy, 110);
+            }
+          }
+        }
+
+        // ---- Draw hand skeleton ----
+        drawHands(p, S);
+
+        // ---- HUD ----
+        const now = performance.now();
+        if (now - App.lastHudUpdate > CONFIG.hudUpdateMs) {
+          App.lastHudUpdate = now;
+          document.getElementById("fps").textContent       = Math.round(p.frameRate());
+          document.getElementById("handCount").textContent  = App.handData.length;
+          document.getElementById("gesture").textContent    = App.globalGesture;
+          document.getElementById("pCount").textContent     = particles.length;
+        }
+      };
+    };
+
+    // ---- Minimal hand drawing ----
+    function drawHands(p, S) {
+      for (const h of App.handData) {
+        const lms = h.sLms;
+        p.stroke(190, 60, 100, 55); p.strokeWeight(1);
+        for (const [a,b] of HAND_CONNECTIONS) {
+          p.line(lms[a].x*S, lms[a].y*S, lms[b].x*S, lms[b].y*S);
+        }
+        p.noStroke();
+        for (let i=0; i<lms.length; i++) {
+          if (i===4||i===8) {
+            p.fill(300, 80, 100, 180);
+            p.circle(lms[i].x*S, lms[i].y*S, 7);
+          } else {
+            p.fill(190, 60, 100, 55);
+            p.circle(lms[i].x*S, lms[i].y*S, 3);
+          }
+        }
+        if (h.pinching) {
+          p.stroke(300, 80, 100, 180); p.strokeWeight(2);
+          p.line(h.thumbTip.x*S, h.thumbTip.y*S, h.indexTip.x*S, h.indexTip.y*S);
+        }
+        if (h.thumbsUp) {
+          p.noFill(); p.stroke(120, 80, 100, 160); p.strokeWeight(1.5);
+          p.circle(h.palm.x*S, h.palm.y*S, 55);
+        }
+        if (h.fist) {
+          p.noFill(); p.stroke(20, 100, 100, 200); p.strokeWeight(2);
+          p.circle(h.palm.x*S, h.palm.y*S, 45);
+        }
+      }
+    }
+
+    // =============================================================
+    //  STARTUP
+    // =============================================================
+    document.getElementById("startBtn").addEventListener("click", async () => {
+      const status  = document.getElementById("status");
+      const overlay = document.getElementById("startOverlay");
+      const video   = document.getElementById("webcam");
+
+      try {
+        status.textContent = "Requesting camera…";
+        App.video = video;
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: "user",
+            width:     { ideal: CONFIG.cameraWidth },
+            height:    { ideal: CONFIG.cameraHeight },
+            frameRate: { ideal: CONFIG.cameraFPS, max: CONFIG.cameraFPS }
+          }
+        });
+        video.srcObject = stream;
+        await video.play();
+
+        status.textContent = "Loading hand model (lite)…";
+        await setupHands();
+
+        status.textContent = "Launching renderer…";
+        new p5(sketch);
+
+        App.started = true;
+        trackingLoop();
+
+        overlay.style.display = "none";
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Error: " + (err.message || "Could not start");
+      }
+    });
+  </script>
 </body>
 </html>
-
-
